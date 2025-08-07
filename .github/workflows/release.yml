@@ -1,0 +1,283 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Chris <goabonga@pm.me>
+
+name: Main Branch Release
+
+on:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: write
+  id-token: write
+
+env:
+  GH_USERNAME: Chris
+  GH_EMAIL: goabonga@pm.me
+  GH_REPO_URL: https://goabonga:${{ secrets.GH_TOKEN }}@github.com/goabonga/FastTCP.git
+  PYTHON_DEFAULT_VERSION: "3.11"
+  POETRY_VERSION: "2.1.1"
+
+jobs:
+
+  test:
+    name: Test and Lint (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    outputs:
+      bump_made: ${{ steps.bump_check.outputs.bump_made }}
+    steps:
+      - name: ⬇️ Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: 🛠️ Install Poetry
+        uses: abatilo/actions-poetry@v4
+        with:
+          poetry-version: ${{ env.POETRY_VERSION }}
+
+      - name: 📦 Install dependencies
+        run: poetry install --with dev
+
+      - name: 🔍 Checking SPDX license headers
+        run: |
+          poetry run python ./scripts/add_license_header.py --path src --types py --check
+          poetry run python ./scripts/add_license_header.py --path tests --types py --check
+
+      - name: 🧹 Check import sorting with isort
+        run: poetry run isort . --check-only --diff
+
+      - name: 🔎 Type check with MyPy
+        run: poetry run mypy src/ tests/
+
+      - name: 🔄 Temporary bump for tests
+        id: bump_check
+        run: |
+          if poetry run cz bump --yes --files-only; then
+            echo "bump_made=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "bump_made=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          
+      - name: 🧪 Run tests
+        id: run_tests
+        run: poetry run pytest --cov
+
+      - name: 📤 Upload coverage reports to Codecov
+        if: matrix.python-version == '3.13' && steps.run_tests.outcome == 'success' 
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: 📤 Upload test results to Codecov
+        if: matrix.python-version == '3.13' && steps.run_tests.outcome == 'success' 
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  bump_and_build:
+    name: Bump version and build package
+    runs-on: ubuntu-latest
+    needs: test
+    if: needs.test.outputs.bump_made == 'true'
+    outputs:
+      bump_made: ${{ steps.bump_check.outputs.bump_made }}
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - name: ⬇️ Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: 🔑 Import GPG key
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+
+      - name: 🔓 Unlock GPG key
+        run: |
+          echo "test" | gpg --batch --yes --passphrase "$GPG_PASSPHRASE" --pinentry-mode loopback -s >/dev/null
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: 🔧 Configure Git user
+        run: |
+          git config --global user.name "${{ env.GH_USERNAME }}"
+          git config --global user.email "${{ env.GH_EMAIL }}"
+          git config --global user.signingkey "$(gpg --list-secret-keys --keyid-format=LONG | grep sec | awk '{print $2}' | cut -d/ -f2)"
+          git config --global commit.gpgsign true
+          git config --global tag.gpgSign true
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
+          
+      - name: 🛠️ Install Poetry
+        uses: abatilo/actions-poetry@v4
+        with:
+          poetry-version: ${{ env.POETRY_VERSION }}
+
+      - name: 📦 Install dependencies
+        run: poetry install --with dev
+
+      - name: 🚀 Bump version with Commitizen
+        id: bump_check
+        run: |
+          if poetry run cz bump --yes --changelog; then
+            echo "bump_made=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No version bump needed."
+            echo "bump_made=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      - name: 📦 Get bumped version
+        id: get_version
+        run: |
+          VERSION=$(poetry version -s)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: 🧱 Build distribution
+        run: poetry build
+
+      - name: ✂️ Extract latest changelog section
+        run: |
+          awk '/^## /{i++} i==1' CHANGELOG.md > LATEST_CHANGELOG.md
+
+      - name: 📤 Push version bump and tag
+        run: |
+          git remote set-url origin ${{ env.GH_REPO_URL }}
+          git push origin HEAD
+          git push origin --tags
+
+      - name: 📤 Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-files
+          path: |
+            dist/*
+            LATEST_CHANGELOG.md
+
+  github_release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: bump_and_build
+    if: needs.bump_and_build.outputs.bump_made == 'true'
+    steps:
+      - name: 📥 Download build artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: release-files
+          path: .
+
+      - name: 🚀 Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.bump_and_build.outputs.version }}
+          name: Release v${{ needs.bump_and_build.outputs.version }}
+          body_path: LATEST_CHANGELOG.md
+          files: |
+            dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+
+  deploy_docs:
+    name: Deploy MkDocs
+    runs-on: ubuntu-latest
+    needs: 
+      - github_release
+      - bump_and_build
+    if: needs.bump_and_build.outputs.bump_made == 'true'
+    steps:
+      - name: ⬇️ Checkout
+        uses: actions/checkout@v4
+        with:
+            fetch-depth: 0
+            ref: main
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
+
+      - name: 🛠️ Install Poetry
+        uses: abatilo/actions-poetry@v4
+        with:
+          poetry-version: ${{ env.POETRY_VERSION }}
+
+      - name: 📦 Install dependencies
+        run: poetry install --with dev
+
+      - name: 🔑 Import GPG key
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+
+      - name: 🔓 Unlock GPG key
+        run: |
+          echo "test" | gpg --batch --yes --passphrase "$GPG_PASSPHRASE" --pinentry-mode loopback -s >/dev/null
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: 🔧 Configure Git user
+        run: |
+          git config --global user.name "${{ env.GH_USERNAME }}"
+          git config --global user.email "${{ env.GH_EMAIL }}"
+          git config --global user.signingkey "$(gpg --list-secret-keys --keyid-format=LONG | grep sec | awk '{print $2}' | cut -d/ -f2)"
+          git config --global commit.gpgsign true
+          git config --global tag.gpgSign true
+
+      - name: 🏗️ Build docs with MkDocs
+        run: poetry run mkdocs build
+        env:
+          DOC_VERSION: ${{ needs.bump_and_build.outputs.version }}
+
+      - name: 📂 Clone gh-pages branch
+        run: |
+          git clone --depth=1 --branch gh-pages ${{ env.GH_REPO_URL }} gh-pages
+          rm -rf gh-pages/*
+          cp -r site/* gh-pages/
+          touch gh-pages/.nojekyll
+
+      - name: ✅ Commit & push signed docs
+        run: |
+          cd gh-pages
+          git add .
+          git commit -S -m "docs: publish docs for v${{ needs.bump_and_build.outputs.version }}"
+          git remote set-url origin ${{ env.GH_REPO_URL }}
+          git push origin gh-pages
+
+  publish_pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: github_release
+    if: needs.bump_and_build.outputs.bump_made == 'true'
+    environment:
+      name: pypi
+      url: https://pypi.org/p/FastTCP
+    steps:
+      - name: 📥 Download build artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: release-files
+          path: .
+
+      - name: 📦 Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

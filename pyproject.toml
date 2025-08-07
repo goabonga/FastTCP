@@ -1,0 +1,138 @@
+[tool.poetry]
+name = "FastTCP"
+version = "0.0.0"
+description = "FastTCP is a Python-based framework designed to facilitate the creation of fast and efficient TCP servers"
+authors = ["Chris <goabonga@pm.me>"]
+license = "MIT"
+readme = "README.md"
+packages = [
+  { include = "fasttcp", from = "src" }
+]
+include = [
+  "src/fasttcp/py.typed"
+]
+exclude = [
+  "tests",
+  "scripts",
+  "docs",
+  "poetry.lock",
+  "Makefile"
+]
+keywords = [
+  "fasttcp",
+  "tcp",
+  "tcp-server",
+  "asyncio",
+  "networking",
+  "framework",
+  "python",
+  "middleware",
+  "dependency-injection",
+  "pydantic",
+  "streaming",
+  "typed",
+  "messagepack",
+  "protobuf"
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Information Technology",
+  "Intended Audience :: System Administrators",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Internet",
+  "Topic :: Software Development",
+  "Topic :: Software Development :: Libraries",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: Software Development :: Libraries :: Application Frameworks",
+  "Framework :: AsyncIO",
+  "Framework :: Pydantic",
+  "Framework :: Pydantic :: 2",
+  "Framework :: Msgpack",
+  "Framework :: Protocol Buffers",
+  "Framework :: FastTCP",
+  "Typing :: Typed"
+]
+
+[tool.poetry.dependencies]
+python = ">=3.10"
+
+[tool.poetry.group.dev]
+optional = true
+
+[tool.poetry.group.dev.dependencies]
+commitizen = "*"
+pytest = "*"
+pytest-cov = "*"
+ruff = "*"
+isort = "*"
+mypy = "*"
+
+[tool.poetry.group.docs]
+optional = true
+
+[tool.poetry.group.docs.dependencies]
+mkdocs = "*"
+mkdocs-material = "*"
+mkdocstrings = {version="*", extras=["python"]}
+mkdocs-gen-files = "*"
+mkdocs-autorefs = "^1.4.2"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "0.0.0"
+tag_format = "v$version"
+update_changelog_on_bump = true
+changelog_file = "CHANGELOG.md"
+version_files = [
+  "pyproject.toml:version",
+  "src/fasttcp/__init__.py",
+  "tests/test_version.py:__expected_version__"
+
+]
+gpg_sign = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "--cov=src/fasttcp --cov-report=term --cov-report=xml --cov-report=html --junitxml=junit.xml -o junit_family=legacy"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+omit = [
+    "tests/*"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "pass  # abstract",
+]
+
+[tool.isort]
+profile = "black"
+src_paths = ["src", "tests"]
+
+[tool.ruff]
+line-length = 88
+src = ["src", "tests"]
+exclude = ["__pycache__"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src", "tests"]
