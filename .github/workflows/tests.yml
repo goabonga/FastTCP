@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Chris <goabonga@pm.me>
+
+name: Pull Request Test & Lint
+
+on:
+  pull_request:
+
+env:
+  POETRY_VERSION: "2.1.1"
+
+jobs:
+  test:
+    name: Test and Lint (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - name: ⬇️ Checkout
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: 🛠️ Install Poetry
+        uses: abatilo/actions-poetry@v4
+        with:
+          poetry-version: ${{ env.POETRY_VERSION }}
+
+      - name: 📦 Install dependencies
+        run: poetry install --with dev
+
+      - name: 🔍 Checking SPDX license headers
+        run: |
+          poetry run python ./scripts/add_license_header.py --path src --types py --check
+          poetry run python ./scripts/add_license_header.py --path tests --types py --check
+
+      - name: 🧹 Check import sorting with isort
+        run: poetry run isort . --check-only --diff
+
+      - name: 🔎 Type check with MyPy
+        run: poetry run mypy src/ tests/
+
+      - name: 🧪 Run tests
+        id: run_tests
+        run: poetry run pytest --cov
+
+      - name: 📤 Upload coverage reports to Codecov
+        if: matrix.python-version == '3.13' && steps.run_tests.outcome == 'success'
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: 📤 Upload test results to Codecov
+        if: matrix.python-version == '3.13' && steps.run_tests.outcome == 'success'
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}

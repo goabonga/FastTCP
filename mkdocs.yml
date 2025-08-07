@@ -1,0 +1,56 @@
+site_name: FastTCP
+site_url: https://goabonga.github.io/FastTCP
+repo_url: https://github.com/goabonga/FastTCP
+repo_name: goabonga/FastTCP
+
+theme:
+  name: material
+  logo: img/FastTCP.svg
+  favicon: img/FastTCP.svg
+  features:
+    - navigation.expand
+    - content.code.copy
+    - navigation.instant
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+
+nav:
+  - Home: index.md
+  - Code of Conduct: code_of_conduct.md
+  - License: license.md
+  - Changelog: changelog.md
+  - API Reference:
+      - fasttcp module: reference/fasttcp.md
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - toc:
+      permalink: true
+  - pymdownx.superfences
+  - pymdownx.tabbed
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.emoji
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/goabonga/FastTCP
+  version: !ENV [DOC_VERSION, "dev"]
+
+plugins:
+  - search
+  - macros
+  - mkdocstrings:
+      default_handler: python
+  - gen-files:
+      scripts:
+        - docs/gen_pages.py
